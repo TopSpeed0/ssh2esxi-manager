@@ -1,0 +1,167 @@
+{
+  "commandSets": [
+    {
+      "name": "Hostname",
+      "type": "list",
+      "description": "Get hostname only",
+      "commands": [
+        "hostname"
+      ]
+    },
+    {
+      "name": "HW and Storage Info",
+      "type": "list",
+      "description": "HardwareAcceleratedInit, MaxHWTransferSize, iSCSI LunQDepth, SATP rules",
+      "commands": [
+        "hostname",
+        "echo HardwareAcceleratedInit,MaxHWTransferSize,iscsivmk_LunQDepth",
+        "esxcfg-advcfg -g /DataMover/HardwareAcceleratedInit ; esxcfg-advcfg -g /DataMover/HardwareAcceleratedMove",
+        "esxcli system settings advanced list -o /DataMover/MaxHWTransferSize | grep -i -E 'Max Value:'",
+        "esxcli system module parameters list -m iscsi_vmk | grep -i -E 'iscsivmk_LunQDepth'",
+        "echo \"List satp rule,nmp device\"",
+        "esxcli storage nmp satp rule list |grep -i comp",
+        "esxcli storage nmp satp rule list | grep \"NETAPP\" | grep \"LUN C-Mode\"",
+        "esxcli storage nmp satp rule list | grep -i netapp"
+      ]
+    },
+    {
+      "name": "IOPS Check",
+      "type": "list",
+      "description": "Check NetApp IOPS and SATP rules",
+      "commands": [
+        "hostname",
+        "esxcli storage nmp satp rule list | grep -i netapp",
+        "esxcli storage nmp satp rule list | grep \"NETAPP\" | grep \"LUN C-Mode\""
+      ]
+    },
+    {
+      "name": "CRC Errors",
+      "type": "list",
+      "description": "Check CRC errors on vmnic0 and vmnic1",
+      "commands": [
+        "hostname",
+        "echo \"CRC ERROR\"",
+        "esxcli network nic stats get -n vmnic0 |grep \"CRC\"",
+        "esxcli network nic stats get -n vmnic1 |grep \"CRC\""
+      ]
+    },
+    {
+      "name": "iSCSI Errors",
+      "type": "list",
+      "description": "Check iSCSI and MTU errors in vmkwarning log",
+      "commands": [
+        "hostname",
+        "grep -Ein 'iscsi|mtu' /var/log/vmkwarning.log"
+      ]
+    },
+    {
+      "name": "Syslog and VMKWarning",
+      "type": "list",
+      "description": "Tail syslog and vmkwarning logs",
+      "commands": [
+        "hostname",
+        "echo tail /var/log/syslog.log -n 100",
+        "tail /var/log/syslog.log -n 100",
+        "echo tail /var/log/vmkwarning.log",
+        "tail /var/log/vmkwarning.log"
+      ]
+    },
+    {
+      "name": "PAM Auth Failures",
+      "type": "list",
+      "description": "Check PAM authentication failures in auth log",
+      "commands": [
+        "cat /var/log/auth.log | grep \"PAM: Authentication failure\""
+      ]
+    },
+    {
+      "name": "All Network Commands",
+      "type": "list",
+      "description": "Full network diagnostics - NIC events, link status, CRC, path state, errors",
+      "commands": [
+        "hostname",
+        "echo \"=== Checking NIC Events ===\"",
+        "esxcli system syslog mark --message=\"Checking NIC events\"",
+        "echo \"=== ALL Link Down Events (Complete History) ===\"",
+        "grep -i \"link.*down\\|link is down\" /var/log/vmkernel.log",
+        "echo \"=== ALL Link Up Events (Complete History) ===\"",
+        "grep -i \"link.*up\\|link is up\" /var/log/vmkernel.log",
+        "echo \"=== Link Down/Up Events (Last 200) ===\"",
+        "grep -iE \"link is (down|up)|link (down|up)\" /var/log/vmkernel.log | tail -200",
+        "echo \"=== NIC State Changes (Last 200) ===\"",
+        "grep -iE \"NIC.*link|vmnic.*(down|up|disabled|enabled|link)\" /var/log/vmkernel.log | tail -200",
+        "echo \"=== Current NIC Status ===\"",
+        "esxcli network nic list",
+        "echo \"=== Hardware Info ===\"",
+        "esxcli hardware pci list | grep -i \"network\\|ethernet\"",
+        "echo \"=== vmnic0 Statistics ===\"",
+        "esxcli network nic stats get -n vmnic0 | grep -E \"CRC|error|drop\"",
+        "echo \"=== vmnic1 Statistics ===\"",
+        "esxcli network nic stats get -n vmnic1 | grep -E \"CRC|error|drop\"",
+        "echo \"=== Path State Changes (iSCSI/Storage) ===\"",
+        "grep -iE \"path.*down|path.*dead|path.*off|nmp.*path\" /var/log/vmkernel.log | tail -200",
+        "echo \"=== Recent NIC/Network Errors (Last 200) ===\"",
+        "grep -iE \"link.*fail|nic.*fail|nic.*error|vmnic.*fail|carrier.*lost|duplex.*mismatch\" /var/log/vmkernel.log | tail -200",
+        "echo \"=== VOBD Log - NIC Issues ===\"",
+        "grep -iE \"nic|network|link\" /var/log/vobd.log | tail -100"
+      ]
+    },
+    {
+      "name": "Syslog Config",
+      "type": "fix",
+      "description": "Configure syslog to send to remote server",
+      "commands": [
+        "esxcli system syslog config set --logdir-unique true --loghost=tcp://<SYSLOG_SERVER_IP>:514",
+        "esxcli system syslog reload"
+      ]
+    },
+    {
+      "name": "Fix HW/iSCSI/SATP",
+      "type": "fix",
+      "description": "Set MaxHWTransferSize, iSCSI LunQDepth, SATP rules, digest settings",
+      "commands": [
+        "hostname ; esxcli system settings advanced set i 16384 -o /DataMover/MaxHWTransferSize",
+        "esxcli system module parameters set -m iscsi_vmk -p iscsivmk_LunQDepth=256",
+        "esxcli storage nmp satp rule add -s VMW_SATP_DEFAULT_AA -P VMW_PSP_RR -O iops=\"1\" -V \"SolidFir\" -M \"SSD SAN\" -e \"SolidFire custom SATP rule\"",
+        "esxcli iscsi adapter param set -A vmhba64 -k HeaderDigest -v required",
+        "esxcli iscsi adapter param set -A vmhba64 -k DataDigest -v required",
+        "esxcli storage nmp satp rule add -V COMPELNT -P VMW_PSP_RR -s VMW_SATP_ALUA -o disable_action_OnRetryErrors",
+        "esxcli storage core claimrule load",
+        "esxcli storage nmp satp rule add -s \"VMW_SATP_ALUA\" -V \"NETAPP\" -M \"LUN C-Mode\" -P \"VMW_PSP_RR\" -O \"iops=1\" -e \"NetApp ONTAP SATP Rule\"",
+        "esxcli storage nmp psp roundrobin deviceconfig set -d <LUN_NAA_ID_1> --iops 1 --type iops",
+        "esxcli storage nmp psp roundrobin deviceconfig set -d <LUN_NAA_ID_2> --iops 1 --type iops",
+        "esxcli storage nmp psp roundrobin deviceconfig set -d <LUN_NAA_ID_3> --iops 1 --type iops"
+      ]
+    },
+    {
+      "name": "Fix NetApp SATP",
+      "type": "fix",
+      "description": "Add NetApp SATP rule and set round-robin on specific LUNs",
+      "commands": [
+        "esxcli storage nmp satp rule add -s \"VMW_SATP_ALUA\" -V \"NETAPP\" -M \"LUN C-Mode\" -P \"VMW_PSP_RR\" -O \"iops=1\" -e \"NetApp ONTAP SATP Rule\"",
+        "esxcli storage nmp psp roundrobin deviceconfig set -d <LUN_NAA_ID_1> --iops 1 --type iops",
+        "esxcli storage nmp psp roundrobin deviceconfig set -d <LUN_NAA_ID_2> --iops 1 --type iops",
+        "esxcli storage nmp psp roundrobin deviceconfig set -d <LUN_NAA_ID_3> --iops 1 --type iops"
+      ]
+    },
+    {
+      "name": "NTP Settings",
+      "type": "fix",
+      "description": "Set NTP to local DC server",
+      "commands": [
+        "esxcli system ntp set -s=<NTP_SERVER_IP>",
+        "esxcli system ntp set -e=yes"
+      ]
+    },
+    {
+      "name": "Enable VAAI",
+      "type": "fix",
+      "description": "Enable all VAAI settings (HW Accelerated Locking, Move, Init)",
+      "commands": [
+        "esxcli system settings advanced set -o /DataMover/HardwareAcceleratedLocking -i 1",
+        "esxcli system settings advanced set -o /DataMover/HardwareAcceleratedMove -i 1",
+        "esxcli system settings advanced set -o /DataMover/HardwareAcceleratedInit -i 1"
+      ]
+    }
+  ]
+}

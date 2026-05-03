@@ -16,10 +16,117 @@ $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $jsonPath = Join-Path $scriptRoot 'Configs\Commands.json'
 $settingsPath = Join-Path $scriptRoot 'Configs\Settings.json'
 
-# Create default Settings.json if not exists
-if (-not (Test-Path $settingsPath)) {
-    @{ vCenters = @(); credentials = @() } | ConvertTo-Json -Depth 10 | Set-Content $settingsPath -Encoding UTF8
+#region Config File Initialization & Validation
+$script:placeholderPattern = '<[A-Z_]+>'
+
+function Initialize-ConfigFiles {
+    $configFiles = @(
+        @{ Name = 'Commands.json';  Path = $jsonPath;     ExamplePath = Join-Path $scriptRoot 'Configs\Commands.json.example' }
+        @{ Name = 'Settings.json';  Path = $settingsPath;  ExamplePath = Join-Path $scriptRoot 'Configs\Settings.json.example' }
+    )
+
+    foreach ($cfg in $configFiles) {
+        if (-not (Test-Path $cfg.Path)) {
+            if (Test-Path $cfg.ExamplePath) {
+                $result = [System.Windows.MessageBox]::Show(
+                    "$($cfg.Name) does not exist.`nWould you like to create it from $($cfg.Name).example?`n`nYou will need to update placeholder values afterward.",
+                    "Create $($cfg.Name)",
+                    [System.Windows.MessageBoxButton]::YesNo,
+                    [System.Windows.MessageBoxImage]::Question
+                )
+                if ($result -eq 'Yes') {
+                    Copy-Item -Path $cfg.ExamplePath -Destination $cfg.Path -Force
+                }
+            } else {
+                # No .example file either — create minimal default for Settings.json
+                if ($cfg.Name -eq 'Settings.json') {
+                    @{ vCenters = @(); credentials = @() } | ConvertTo-Json -Depth 10 | Set-Content $cfg.Path -Encoding UTF8
+                }
+            }
+        }
+    }
 }
+
+function Test-PlaceholdersInConfig {
+    $configFiles = @(
+        @{ Name = 'Commands.json'; Path = $jsonPath }
+        @{ Name = 'Settings.json'; Path = $settingsPath }
+    )
+
+    $allPlaceholders = @()
+    foreach ($cfg in $configFiles) {
+        if (-not (Test-Path $cfg.Path)) { continue }
+        $content = Get-Content $cfg.Path -Raw
+        $matches = [regex]::Matches($content, $script:placeholderPattern)
+        if ($matches.Count -gt 0) {
+            $uniqueValues = ($matches | ForEach-Object { $_.Value } | Sort-Object -Unique) -join ', '
+            $allPlaceholders += "$($cfg.Name): $uniqueValues"
+        }
+    }
+
+    if ($allPlaceholders.Count -gt 0) {
+        $msg = "The following config files contain placeholder values that should be updated:`n`n"
+        $msg += ($allPlaceholders -join "`n")
+        $msg += "`n`nWould you like to continue anyway?"
+        $result = [System.Windows.MessageBox]::Show(
+            $msg,
+            'Placeholder Values Detected',
+            [System.Windows.MessageBoxButton]::YesNo,
+            [System.Windows.MessageBoxImage]::Warning
+        )
+        return ($result -eq 'Yes')
+    }
+    return $true
+}
+
+function Test-ConfigMatchesExample {
+    $configPairs = @(
+        @{ Name = 'Commands.json'; Path = $jsonPath;     ExamplePath = Join-Path $scriptRoot 'Configs\Commands.json.example' }
+        @{ Name = 'Settings.json'; Path = $settingsPath;  ExamplePath = Join-Path $scriptRoot 'Configs\Settings.json.example' }
+    )
+
+    $unchanged = @()
+    foreach ($pair in $configPairs) {
+        if ((Test-Path $pair.Path) -and (Test-Path $pair.ExamplePath)) {
+            $configHash = (Get-FileHash -Path $pair.Path -Algorithm SHA256).Hash
+            $exampleHash = (Get-FileHash -Path $pair.ExamplePath -Algorithm SHA256).Hash
+            if ($configHash -eq $exampleHash) {
+                $unchanged += $pair.Name
+            }
+        }
+    }
+
+    if ($unchanged.Count -gt 0) {
+        $msg = "The following config files are identical to their .example templates:`n`n"
+        $msg += ($unchanged -join "`n")
+        $msg += "`n`nPlease update them with your actual values.`nWould you like to continue anyway?"
+        $result = [System.Windows.MessageBox]::Show(
+            $msg,
+            'Config Files Not Modified',
+            [System.Windows.MessageBoxButton]::YesNo,
+            [System.Windows.MessageBoxImage]::Warning
+        )
+        return ($result -eq 'Yes')
+    }
+    return $true
+}
+
+# Run initialization
+Initialize-ConfigFiles
+
+# Validate configs — allow user to dismiss warnings
+$continueAfterExampleCheck = Test-ConfigMatchesExample
+if (-not $continueAfterExampleCheck) {
+    Write-Host "User chose to exit — config files need to be updated." -ForegroundColor Yellow
+    exit
+}
+
+$continueAfterPlaceholders = Test-PlaceholdersInConfig
+if (-not $continueAfterPlaceholders) {
+    Write-Host "User chose to exit — placeholder values need to be replaced." -ForegroundColor Yellow
+    exit
+}
+#endregion
 
 #region Helper Functions
 function Load-Settings {

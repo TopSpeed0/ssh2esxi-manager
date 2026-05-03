@@ -1,5 +1,6 @@
 # Personal / sensitive data
 Configs/Settings.json
+Configs/Commands.json
 
 # Log files
 *.log
