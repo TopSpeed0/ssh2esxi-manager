@@ -1,4 +1,5 @@
 # SSH2ESXi Manager
+<img width="886" height="793" alt="image" src="https://github.com/user-attachments/assets/31f949e9-12c4-460f-9b6b-6d488346af3d" />
 
 A PowerShell WPF GUI tool for running SSH commands on VMware ESXi hosts in parallel across clusters.
 
