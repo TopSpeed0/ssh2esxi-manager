@@ -1,0 +1,11 @@
+{
+  "vCenters": [
+    { "name": "THC", "server": "thcpvc01.cognyte.local" },
+    { "name": "HRZ", "server": "hrzpvc01.cognyte.local" },
+    { "name": "BR", "server": "brvct01.cognyte.local" },
+    { "name": "CLA", "server": "clarian-vc01.cognyte.local" },
+    { "name": "CYP-LAB", "server": "cypbvc01.cognyte.local" },
+    { "name": "DE", "server": "vcenter.syb.cognyte.local" }
+  ],
+  "credentials": []
+}

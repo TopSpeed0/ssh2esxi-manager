@@ -1,0 +1,18 @@
+# Personal / sensitive data
+Configs/Settings.json
+
+# Log files
+*.log
+
+# PowerShell temp
+*.tmp
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
