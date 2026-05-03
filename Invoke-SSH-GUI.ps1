@@ -283,10 +283,12 @@ function Decrypt-Credential {
             <ListBox Name="lstCommands" Height="100" Margin="5" SelectionMode="Single"/>
         </GroupBox>
 
-        <!-- Row 4: Run -->
+        <!-- Row 4: Run + SSH Toggle -->
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,8">
             <Button Name="btnRun" Content="Run Commands" Width="150" Margin="0,0,10,0" FontSize="14" FontWeight="Bold"/>
-            <Button Name="btnStop" Content="Stop" Width="80" Background="#C42B1C" BorderBrush="#C42B1C" IsEnabled="False"/>
+            <Button Name="btnStop" Content="Stop" Width="80" Background="#C42B1C" BorderBrush="#C42B1C" IsEnabled="False" Margin="0,0,20,0"/>
+            <Button Name="btnEnableSSH" Content="Enable SSH" Width="110" Background="#16825D" BorderBrush="#16825D" Margin="0,0,5,0" FontSize="12"/>
+            <Button Name="btnDisableSSH" Content="Disable SSH" Width="110" Background="#C42B1C" BorderBrush="#C42B1C" FontSize="12"/>
         </StackPanel>
 
         <!-- Row 5: Status -->
@@ -328,6 +330,8 @@ $lblDescription = $window.FindName('lblDescription')
 $lstCommands   = $window.FindName('lstCommands')
 $btnRun        = $window.FindName('btnRun')
 $btnStop       = $window.FindName('btnStop')
+$btnEnableSSH  = $window.FindName('btnEnableSSH')
+$btnDisableSSH = $window.FindName('btnDisableSSH')
 $btnAddSet     = $window.FindName('btnAddSet')
 $lblStatus     = $window.FindName('lblStatus')
 $txtOutput     = $window.FindName('txtOutput')
@@ -787,6 +791,71 @@ $btnRun.Add_Click({
     $btnRun.IsEnabled = $true
     $btnStop.IsEnabled = $false
 })
+
+#region SSH Enable/Disable Handlers
+function Set-ClusterSSH {
+    param([string]$State)
+
+    $cluster = $cmbCluster.SelectedItem
+    if (-not $cluster) {
+        [System.Windows.MessageBox]::Show("Please select a cluster first.", "No Cluster Selected", 'OK', 'Warning')
+        return
+    }
+
+    $action = if ($State -eq 'Start') { 'Enable' } else { 'Disable' }
+    $confirm = [System.Windows.MessageBox]::Show(
+        "Are you sure you want to $action SSH on all hosts in cluster '$cluster'?",
+        "$action SSH",
+        [System.Windows.MessageBoxButton]::YesNo,
+        [System.Windows.MessageBoxImage]::Question
+    )
+    if ($confirm -ne 'Yes') { return }
+
+    $output = [System.Text.StringBuilder]::new()
+    $output.AppendLine("=== SSH $action : $(Get-Date) ===") | Out-Null
+    $output.AppendLine("Cluster: $cluster") | Out-Null
+    $output.AppendLine("=" * 50) | Out-Null
+
+    try {
+        $hosts = Get-Cluster -Name $cluster | Get-VMHost
+        foreach ($esx in $hosts) {
+            $sshSvc = ($esx | Get-VMHostService).Where({ $_.Key -eq 'TSM-SSH' })
+            if (-not $sshSvc) {
+                $output.AppendLine("[SKIP] $($esx.Name) — TSM-SSH service not found") | Out-Null
+                continue
+            }
+
+            switch ($State) {
+                'Start' {
+                    if ($sshSvc.Running) {
+                        $output.AppendLine("[SKIP] $($esx.Name) — SSH already running") | Out-Null
+                    } else {
+                        Start-VMHostService -HostService $sshSvc -Confirm:$false | Out-Null
+                        $output.AppendLine("[OK]   $($esx.Name) — SSH started") | Out-Null
+                    }
+                }
+                'Stop' {
+                    if (-not $sshSvc.Running) {
+                        $output.AppendLine("[SKIP] $($esx.Name) — SSH already stopped") | Out-Null
+                    } else {
+                        Stop-VMHostService -HostService $sshSvc -Confirm:$false | Out-Null
+                        $output.AppendLine("[OK]   $($esx.Name) — SSH stopped") | Out-Null
+                    }
+                }
+            }
+            [System.Windows.Forms.Application]::DoEvents()
+        }
+        $lblStatus.Content = "SSH $action completed"
+    } catch {
+        $output.AppendLine("`n[EXCEPTION] $_") | Out-Null
+        $lblStatus.Content = "SSH $action error: $_"
+    }
+
+    $txtOutput.Text = $output.ToString()
+}
+
+$btnEnableSSH.Add_Click({ Set-ClusterSSH -State 'Start' })
+$btnDisableSSH.Add_Click({ Set-ClusterSSH -State 'Stop' })
 #endregion
 
 $window.ShowDialog() | Out-Null
