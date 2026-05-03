@@ -727,6 +727,23 @@ $btnRun.Add_Click({
         $txtOutput.Text = $output.ToString()
         [System.Windows.Forms.Application]::DoEvents()
 
+        # Check for placeholder values in commands before execution
+        $placeholderCmds = $cs.commands | Where-Object { $_ -match $script:placeholderPattern }
+        if ($placeholderCmds.Count -gt 0) {
+            $phMatches = $placeholderCmds | ForEach-Object { [regex]::Matches($_, $script:placeholderPattern) | ForEach-Object { $_.Value } } | Sort-Object -Unique
+            $output.AppendLine("[ERROR] The following commands contain placeholder values that must be replaced before execution:") | Out-Null
+            foreach ($phCmd in $placeholderCmds) {
+                $output.AppendLine("  > $phCmd") | Out-Null
+            }
+            $output.AppendLine("`nPlaceholders found: $($phMatches -join ', ')") | Out-Null
+            $output.AppendLine("Please edit Configs\Commands.json and replace the placeholder values with actual values.") | Out-Null
+            $txtOutput.Text = $output.ToString()
+            $lblStatus.Content = "Aborted — placeholder values detected"
+            $btnRun.IsEnabled = $true
+            $btnStop.IsEnabled = $false
+            return
+        }
+
         $jobs = @()
         foreach ($esx in $sshHosts) {
             foreach ($cmd in $cs.commands) {
